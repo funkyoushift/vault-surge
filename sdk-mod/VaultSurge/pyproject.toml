@@ -1,0 +1,11 @@
+[project]
+name = "VaultSurge"
+version = "0.1.0"
+authors = [{ name = "FunkYouSHIFT" }]
+description = "Authenticated local game adapter for the Vault Surge Twitch Extension."
+
+[tool.sdkmod]
+name = "VaultSurge"
+license = { name = "GPL3", url = "https://choosealicense.com/licenses/gpl-3.0/" }
+version = "0.1.0"
+coop_support = "Unknown"

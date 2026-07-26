@@ -1,0 +1,30 @@
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+.boot-fallback {
+  display: grid;
+  min-height: 180px;
+  place-content: center;
+  gap: 8px;
+  color: #f3f7ff;
+  background: #07101d;
+  font-family: system-ui, sans-serif;
+  text-align: center;
+}
+
+.boot-fallback strong {
+  color: #41e6ff;
+  letter-spacing: .12em;
+}
+
+.boot-fallback span {
+  color: #8fa0b8;
+  font-size: 12px;
+}
