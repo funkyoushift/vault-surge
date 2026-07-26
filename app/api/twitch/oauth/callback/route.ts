@@ -8,10 +8,11 @@ import {
   serializeCookie,
   twitchOAuthStateCookie,
   twitchSessionCookie,
+  verifyOAuthState,
 } from "../../../../../lib/twitch/server";
 
-function redirectWithStatus(request: Request, status: string, detail?: string) {
-  const url = new URL("/", request.url);
+function redirectWithStatus(redirectUri: string, status: string, detail?: string) {
+  const url = new URL("/", redirectUri);
   url.searchParams.set("twitch", status);
   if (detail) url.searchParams.set("detail", detail.slice(0, 120));
   return url;
@@ -19,24 +20,26 @@ function redirectWithStatus(request: Request, status: string, detail?: string) {
 
 export async function GET(request: Request) {
   const config = getTwitchServerConfig();
-  if (!config) return Response.redirect(redirectWithStatus(request, "not_configured"), 302);
+  if (!config) return Response.redirect(new URL("/?twitch=not_configured", request.url), 302);
 
   const url = new URL(request.url);
   const error = url.searchParams.get("error");
-  if (error) return Response.redirect(redirectWithStatus(request, "denied", error), 302);
+  if (error) return Response.redirect(redirectWithStatus(config.redirectUri, "denied", error), 302);
 
   const code = url.searchParams.get("code") ?? "";
   const state = url.searchParams.get("state") ?? "";
   const expectedState = readCookie(request, twitchOAuthStateCookie);
-  if (!code || !state || !expectedState || !safeEqual(state, expectedState)) {
-    return Response.redirect(redirectWithStatus(request, "invalid_state"), 302);
+  const cookieStateMatches = Boolean(expectedState) && safeEqual(state, expectedState);
+  const signedStateMatches = Boolean(state) && await verifyOAuthState(state, config.sessionSecret);
+  if (!code || (!cookieStateMatches && !signedStateMatches)) {
+    return Response.redirect(redirectWithStatus(config.redirectUri, "invalid_state"), 302);
   }
 
   try {
     const session = await exchangeAuthorizationCode(config, code);
     const response = new Response(null, {
       status: 302,
-      headers: { Location: redirectWithStatus(request, "connected").toString() },
+      headers: { Location: redirectWithStatus(config.redirectUri, "connected").toString() },
     });
     response.headers.append(
       "Set-Cookie",
@@ -51,6 +54,6 @@ export async function GET(request: Request) {
     response.headers.set("Cache-Control", "no-store");
     return response;
   } catch {
-    return Response.redirect(redirectWithStatus(request, "exchange_failed"), 302);
+    return Response.redirect(redirectWithStatus(config.redirectUri, "exchange_failed"), 302);
   }
 }

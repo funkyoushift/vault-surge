@@ -1,7 +1,7 @@
 import {
+  createOAuthState,
   createAuthorizationUrl,
   getTwitchServerConfig,
-  randomToken,
   serializeCookie,
   twitchOAuthStateCookie,
 } from "../../../../../lib/twitch/server";
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
       { status: 503 },
     );
   }
-  const state = randomToken();
+  const state = await createOAuthState(config.sessionSecret);
   return new Response(null, {
     status: 302,
     headers: {

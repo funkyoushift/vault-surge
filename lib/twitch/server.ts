@@ -85,6 +85,39 @@ export function randomToken(byteLength = 32): string {
   return bytesToBase64Url(crypto.getRandomValues(new Uint8Array(byteLength)));
 }
 
+async function oauthStateSignature(payload: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return bytesToBase64Url(
+    new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(payload))),
+  );
+}
+
+export async function createOAuthState(secret: string): Promise<string> {
+  const payload = `${Date.now()}.${randomToken()}`;
+  return `${payload}.${await oauthStateSignature(payload, secret)}`;
+}
+
+export async function verifyOAuthState(
+  value: string,
+  secret: string,
+  maxAgeMs = 10 * 60 * 1000,
+): Promise<boolean> {
+  const [timestampPart, nonce, signature, ...extra] = value.split(".");
+  if (!timestampPart || !nonce || !signature || extra.length > 0) return false;
+  const timestamp = Number(timestampPart);
+  if (!Number.isFinite(timestamp) || timestamp > Date.now() + 60_000 || Date.now() - timestamp > maxAgeMs) {
+    return false;
+  }
+  const expected = await oauthStateSignature(`${timestampPart}.${nonce}`, secret);
+  return safeEqual(signature, expected);
+}
+
 async function sessionKey(secret: string): Promise<CryptoKey> {
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(secret));
   return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);

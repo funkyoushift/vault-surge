@@ -66,6 +66,9 @@ function requestJson(urlValue, options = {}, body) {
   const url = new URL(urlValue);
   const client = url.protocol === "https:" ? https : http;
   const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
+  const usesLocalCertificate = url.hostname === "localhost"
+    || url.hostname === "127.0.0.1"
+    || url.hostname === "::1";
   const certificatePath = mkcertRootPath && existsSync(mkcertRootPath)
     ? mkcertRootPath
     : resolve(projectRoot, ".certs", "localhost.pem");
@@ -78,7 +81,7 @@ function requestJson(urlValue, options = {}, body) {
         ...(options.headers || {}),
       },
       timeout: options.timeout || 5000,
-      ...(url.protocol === "https:" && existsSync(certificatePath)
+      ...(url.protocol === "https:" && usesLocalCertificate && existsSync(certificatePath)
         ? { ca: readFileSync(certificatePath) }
         : {}),
     }, (response) => {
