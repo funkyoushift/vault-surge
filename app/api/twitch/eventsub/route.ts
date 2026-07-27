@@ -24,6 +24,9 @@ interface ChannelPointRedemptionEvent {
 
 async function handleNotification(message: EventSubEnvelope): Promise<Response> {
   if (message.subscription?.type !== "channel.channel_points_custom_reward_redemption.add") {
+    console.log("eventsub.ignored", {
+      type: message.subscription?.type ?? "missing",
+    });
     return new Response(null, { status: 204 });
   }
   const event = message.event as ChannelPointRedemptionEvent;
@@ -33,9 +36,34 @@ async function handleNotification(message: EventSubEnvelope): Promise<Response> 
   const rewardTitle = event.reward?.title ?? "";
   const sparks = sparksFromChannelPointRewardTitle(rewardTitle);
   if (!redemptionId || !channelId || !userId || !sparks) {
+    console.warn("eventsub.channel_points.skipped", {
+      hasRedemptionId: Boolean(redemptionId),
+      hasChannelId: Boolean(channelId),
+      hasUserId: Boolean(userId),
+      rewardTitle,
+      sparks,
+    });
     return new Response(null, { status: 204 });
   }
-  await creditChannelPointSparks(channelId, userId, redemptionId, sparks);
+  try {
+    const wallet = await creditChannelPointSparks(channelId, userId, redemptionId, sparks);
+    console.log("eventsub.channel_points.credited", {
+      rewardTitle,
+      sparks,
+      channelIdSuffix: channelId.slice(-4),
+      userIdSuffix: userId.slice(-4),
+      balance: wallet.balance,
+    });
+  } catch (error) {
+    console.error("eventsub.channel_points.credit_failed", {
+      rewardTitle,
+      sparks,
+      channelIdSuffix: channelId.slice(-4),
+      userIdSuffix: userId.slice(-4),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
   return new Response(null, { status: 204 });
 }
 
@@ -60,6 +88,10 @@ export async function POST(request: Request) {
   }
 
   if (headers.messageType === "webhook_callback_verification" && message.challenge) {
+    console.log("eventsub.challenge", {
+      type: message.subscription?.type ?? "missing",
+      status: message.subscription?.status ?? "missing",
+    });
     return new Response(message.challenge, {
       status: 200,
       headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" },

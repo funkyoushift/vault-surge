@@ -11,6 +11,19 @@ interface TwitchStatus {
   eventSubVerificationConfigured: boolean;
 }
 
+interface EventSubSubscriptionStatus {
+  id: string;
+  status: string;
+  type: string;
+  transport?: { method?: string; callback?: string };
+}
+
+interface EventSubSetupStatus {
+  callback?: string;
+  subscriptions?: EventSubSubscriptionStatus[];
+  error?: string;
+}
+
 const initialStatus: TwitchStatus = {
   configured: false,
   connected: false,
@@ -24,6 +37,7 @@ export function TwitchConnection() {
   const [status, setStatus] = useState(initialStatus);
   const [loading, setLoading] = useState(true);
   const [eventSubState, setEventSubState] = useState("");
+  const [eventSubStatus, setEventSubStatus] = useState<EventSubSetupStatus | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -35,6 +49,21 @@ export function TwitchConnection() {
   }, []);
 
   useEffect(() => { void refresh() }, [refresh]);
+
+  const refreshChannelPointStatus = useCallback(async () => {
+    if (!status.connected) return;
+    try {
+      const response = await fetch("/api/twitch/eventsub/setup", { cache: "no-store" });
+      const payload = await response.json() as EventSubSetupStatus;
+      setEventSubStatus(payload);
+      if (!response.ok) throw new Error(payload.error || "Could not read Channel Points setup.");
+      const active = payload.subscriptions?.some((subscription) => subscription.status === "enabled");
+      const statusText = payload.subscriptions?.map((subscription) => subscription.status).join(", ") || "none";
+      setEventSubState(active ? "Channel Points linked" : `Channel Points subscription: ${statusText}`);
+    } catch (error) {
+      setEventSubState(error instanceof Error ? error.message : "Could not read Channel Points setup.");
+    }
+  }, [status.connected]);
 
   const disconnect = async () => {
     setLoading(true);
@@ -49,6 +78,7 @@ export function TwitchConnection() {
       const payload = await response.json() as { created?: unknown[]; alreadyExists?: boolean; error?: string };
       if (!response.ok) throw new Error(payload.error || "Setup failed.");
       setEventSubState(payload.alreadyExists ? "Channel Points already linked" : "Channel Points linked");
+      await refreshChannelPointStatus();
     } catch (error) {
       setEventSubState(error instanceof Error ? error.message : "Setup failed.");
     }
@@ -64,6 +94,9 @@ export function TwitchConnection() {
           <button className="connection-action" type="button" onClick={() => void setupChannelPoints()}>
             Setup Channel Points
           </button>
+          <button className="connection-action" type="button" onClick={() => void refreshChannelPointStatus()}>
+            Check Channel Points
+          </button>
           <button className="connection-action" type="button" onClick={() => void disconnect()}>Disconnect</button>
         </>
       ) : (
@@ -72,6 +105,13 @@ export function TwitchConnection() {
         </a>
       )}
       {eventSubState && <small className="connection-note">{eventSubState}</small>}
+      {eventSubStatus?.subscriptions && (
+        <small className="connection-note">
+          EventSub: {eventSubStatus.subscriptions.length
+            ? eventSubStatus.subscriptions.map((subscription) => subscription.status).join(", ")
+            : "no matching subscription"}
+        </small>
+      )}
     </div>
   );
 }
