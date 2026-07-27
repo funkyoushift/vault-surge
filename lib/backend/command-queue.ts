@@ -57,8 +57,9 @@ async function sign(command: Omit<QueuedCommand, "signature">): Promise<string> 
 }
 
 function assertSession(claims: TwitchExtensionClaims): void {
+  const hostedTestAlwaysActive = configured(process.env.VAULT_SURGE_LOCAL_SESSION_ACTIVE) === "true";
   const companionState = getCompanionState();
-  if (!companionState.sessionActive || companionState.paused) {
+  if (!hostedTestAlwaysActive && (!companionState.sessionActive || companionState.paused)) {
     throw new Error("The streamer session is not accepting requests.");
   }
   const channelId = configured(process.env.VAULT_SURGE_LOCAL_CHANNEL_ID);
