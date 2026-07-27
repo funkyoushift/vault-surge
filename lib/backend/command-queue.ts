@@ -21,9 +21,50 @@ const lastGlobalUse = new Map<string, number>();
 const lastViewerUse = new Map<string, number>();
 const encoder = new TextEncoder();
 
+type CommandQueueDurableObject = {
+  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+};
+
 function configured(value: string | undefined): string {
   const normalized = value?.trim() ?? "";
   return normalized && !normalized.startsWith("replace_with_") ? normalized : "";
+}
+
+function configuredChannelId(channelId?: string): string {
+  return configured(channelId) || configured(process.env.VAULT_SURGE_LOCAL_CHANNEL_ID) || "local-development";
+}
+
+async function durableQueue(channelId?: string): Promise<CommandQueueDurableObject | undefined> {
+  try {
+    const workers = await import("cloudflare:workers");
+    const bindings = workers.env as unknown as {
+      VAULT_SURGE_COMMAND_QUEUE?: DurableObjectNamespace;
+    };
+    const namespace = bindings.VAULT_SURGE_COMMAND_QUEUE;
+    if (!namespace) return undefined;
+    return namespace.getByName(configuredChannelId(channelId)) as unknown as CommandQueueDurableObject;
+  } catch {
+    return undefined;
+  }
+}
+
+async function durableRequest<T>(
+  action: "enqueue" | "list" | "update",
+  channelId: string | undefined,
+  body?: unknown,
+): Promise<T | undefined> {
+  const durable = await durableQueue(channelId);
+  if (!durable) return undefined;
+  const response = await durable.fetch(`https://vault-surge-command-queue.local/${action}`, {
+    method: body ? "POST" : "GET",
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || `Command queue ${action} failed.`);
+  }
+  return await response.json() as T;
 }
 
 function base64Url(bytes: Uint8Array): string {
@@ -121,6 +162,8 @@ export async function enqueueViewerCommand(
     viewerParameters: validation.parameters,
   };
   const command: QueuedCommand = { ...unsigned, signature: await sign(unsigned) };
+  const durableCommand = await durableRequest<QueuedCommand>("enqueue", command.channelId, { command });
+  if (durableCommand) return durableCommand;
   queue.unshift(command);
   if (queue.length > 250) queue.length = 250;
   return command;
@@ -134,7 +177,7 @@ export async function enqueueLocalTestCommand(
   const effect = effectByKey.get(effectKey);
   if (!effect) throw new Error("Unknown catalog effect.");
   const localEffect = { ...effect, requiresApproval };
-  const channelId = configured(process.env.VAULT_SURGE_LOCAL_CHANNEL_ID) || "local-development";
+  const channelId = configuredChannelId();
   return enqueueViewerCommand(
     {
       channel_id: channelId,
@@ -154,7 +197,9 @@ export async function enqueueLocalTestCommand(
   );
 }
 
-export function listCommands(channelId?: string): QueuedCommand[] {
+export async function listCommands(channelId?: string): Promise<QueuedCommand[]> {
+  const durableCommands = await durableRequest<QueuedCommand[]>("list", channelId);
+  if (durableCommands) return durableCommands;
   const now = Date.now();
   for (const command of queue) {
     if (!terminalStatuses.includes(command.status) && Date.parse(command.expiresAt) <= now) {
@@ -169,8 +214,14 @@ const companionStatuses = new Set<EffectLifecycleStatus>([
   "approved", "rejected", "dispatched", "running", "completed", "retryable", "failed", "cancelled",
 ]);
 
-export function updateCommandStatus(id: string, status: EffectLifecycleStatus, detail?: string): QueuedCommand {
+export async function updateCommandStatus(
+  id: string,
+  status: EffectLifecycleStatus,
+  detail?: string,
+): Promise<QueuedCommand> {
   if (!companionStatuses.has(status)) throw new Error("Unsupported companion status.");
+  const durableCommand = await durableRequest<QueuedCommand>("update", undefined, { id, status, detail });
+  if (durableCommand) return durableCommand;
   const command = queue.find((item) => item.id === id);
   if (!command) throw new Error("Command was not found.");
   command.status = status;

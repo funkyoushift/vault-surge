@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   if (!authorized(request)) return Response.json({ error: "Companion authorization failed." }, { status: 401 });
   const channelId = new URL(request.url).searchParams.get("channelId") ?? undefined;
   return Response.json(
-    { commands: listCommands(channelId), state: getCompanionState() },
+    { commands: await listCommands(channelId), state: getCompanionState() },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     if (typeof body.id !== "string" || typeof body.status !== "string") {
       return Response.json({ error: "Command id and status are required." }, { status: 400 });
     }
-    const command = updateCommandStatus(
+    const command = await updateCommandStatus(
       body.id,
       body.status as EffectLifecycleStatus,
       typeof body.detail === "string" ? body.detail : undefined,

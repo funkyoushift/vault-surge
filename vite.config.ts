@@ -20,6 +20,20 @@ const hasLocalHttpsCertificate =
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  durable_objects: {
+    bindings: [
+      {
+        name: "VAULT_SURGE_COMMAND_QUEUE",
+        class_name: "VaultSurgeCommandQueue",
+      },
+    ],
+  },
+  migrations: [
+    {
+      tag: "v1",
+      new_sqlite_classes: ["VaultSurgeCommandQueue"],
+    },
+  ],
   d1_databases: d1
     ? [
         {

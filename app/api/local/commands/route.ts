@@ -41,7 +41,7 @@ async function sdkStatus() {
 export async function GET(request: Request) {
   if (!localRequest(request)) return Response.json({ error: "Local companion only." }, { status: 403 });
   return Response.json(
-    { commands: listCommands(), sdk: await sdkStatus(), state: getCompanionState() },
+    { commands: await listCommands(), sdk: await sdkStatus(), state: getCompanionState() },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     };
     const status = statuses[body.action];
     if (!status) throw new Error("Unsupported local command action.");
-    return Response.json({ command: updateCommandStatus(body.id, status) });
+    return Response.json({ command: await updateCommandStatus(body.id, status) });
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "Local command failed." },
