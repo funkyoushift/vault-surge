@@ -1,6 +1,6 @@
 import {
   getBroadcasterSession,
-  twitchHelixFetch,
+  twitchAppHelixFetch,
 } from "../../../../../lib/twitch/server";
 
 type EventSubSubscription = {
@@ -41,8 +41,7 @@ export async function GET(request: Request) {
   if (!session) {
     return Response.json({ error: "Connect Twitch broadcaster OAuth first." }, { status: 401, headers });
   }
-  const subscriptions = await twitchHelixFetch<EventSubListResponse>(
-    session,
+  const subscriptions = await twitchAppHelixFetch<EventSubListResponse>(
     "/eventsub/subscriptions?type=channel.channel_points_custom_reward_redemption.add",
   );
   return Response.json({
@@ -66,8 +65,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const created = await twitchHelixFetch<EventSubCreateResponse>(
-      session,
+    const created = await twitchAppHelixFetch<EventSubCreateResponse>(
       "/eventsub/subscriptions",
       {
         method: "POST",

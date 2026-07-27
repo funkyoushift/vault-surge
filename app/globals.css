@@ -238,9 +238,10 @@ h1 { margin-bottom: 8px; font-size: clamp(30px, 4vw, 54px); line-height: 1; lett
 .connection-strip, .health-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-bottom: 14px; }
 .connection-strip > div { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 9px; padding: 13px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); font-size: 11px; }
 .connection-strip span { color: var(--muted); }
-.connection-strip .twitch-connection { grid-template-columns: 14px 1fr auto auto; }
+.connection-strip .twitch-connection { grid-template-columns: 14px 1fr auto auto auto; }
 .connection-action { padding: 5px 8px; border: 1px solid #7950c7; border-radius: 5px; color: #d7c1ff; background: rgba(145, 70, 255, .12); cursor: pointer; font-size: 9px; font-weight: 850; text-decoration: none; }
 .connection-action.disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+.connection-note { grid-column: 2 / -1; color: #38e8ff; font-size: 9px; }
 .warning-callout { display: flex; gap: 16px; align-items: center; padding: 13px 16px; border: 1px solid rgba(255, 81, 102, .3); border-radius: 7px; color: #cf9ba4; background: rgba(255, 81, 102, .06); font-size: 11px; }
 .warning-callout strong { color: var(--red); }
 .global-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
