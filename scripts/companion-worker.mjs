@@ -21,7 +21,6 @@ export function canonicalCommand(command) {
     viewerId: command.viewerId,
     viewerParameters: command.viewerParameters,
     adapterParameters: command.adapterParameters,
-    monetization: command.monetization,
     createdAt: command.createdAt,
     expiresAt: command.expiresAt,
     nonce: command.nonce,

@@ -49,7 +49,6 @@ async function sign(command: Omit<QueuedCommand, "signature">): Promise<string> 
     viewerId: command.viewerId,
     viewerParameters: command.viewerParameters,
     adapterParameters: command.adapterParameters,
-    monetization: command.monetization,
     createdAt: command.createdAt,
     expiresAt: command.expiresAt,
     nonce: command.nonce,
