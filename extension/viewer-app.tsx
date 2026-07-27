@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   PublicEffectDefinition,
 } from "../lib/contracts/public-effects";
@@ -55,6 +55,72 @@ export function ViewerApp() {
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const pendingPurchase = useRef<PendingPurchase | null>(null);
+  const latestState = useRef({
+    authorization,
+    sparkPacks,
+    walletBalance: wallet.balance,
+  });
+
+  useEffect(() => {
+    latestState.current = {
+      authorization,
+      sparkPacks,
+      walletBalance: wallet.balance,
+    };
+  }, [authorization, sparkPacks, wallet.balance]);
+
+  const refreshWallet = useCallback(async (token: string) => {
+    const walletResponse = await parseResponse<{
+      wallet: ViewerWallet;
+      sparkPacks: SparkPackDefinition[];
+    }>(await fetch(`${ebsUrl}/api/twitch/extension/wallet`, {
+      cache: "no-store",
+      headers: { "x-extension-jwt": token },
+    }));
+    setWallet(walletResponse.wallet);
+    setSparkPacks(walletResponse.sparkPacks);
+    return walletResponse;
+  }, []);
+
+  const creditSparkPack = useCallback(async (
+    sku: string,
+    transactionId: string,
+    transactionReceipt: string,
+  ) => {
+    const current = latestState.current;
+    if (current.authorization.status !== "ready") return;
+    setSubmitting(true);
+    try {
+      const previousBalance = current.walletBalance;
+      const result = await parseResponse<{ wallet: ViewerWallet }>(
+        await fetch(`${ebsUrl}/api/twitch/extension/wallet`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-extension-jwt": current.authorization.token,
+          },
+          body: JSON.stringify({ sku, transactionId, transactionReceipt }),
+        }),
+      );
+      setWallet(result.wallet);
+      const refreshed = await refreshWallet(current.authorization.token);
+      const creditedAmount = Math.max(0, refreshed.wallet.balance - previousBalance);
+      const pack = current.sparkPacks.find((item) => item.sku === sku);
+      if (creditedAmount > 0) {
+        setNotice(`${creditedAmount.toLocaleString()} Sparks added.`);
+      } else if (result.wallet.balance > previousBalance) {
+        setNotice(`${(result.wallet.balance - previousBalance).toLocaleString()} Sparks added.`);
+      } else {
+        setNotice(pack
+          ? `${pack.sparks.toLocaleString()} Spark pack was already credited. Balance unchanged.`
+          : "Spark pack was already credited. Balance unchanged.");
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Spark purchase failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [refreshWallet]);
 
   useEffect(() => {
     const connect = async (auth: VaultSurgeAuthorization) => {
@@ -70,15 +136,8 @@ export function ViewerApp() {
         }>(await fetch(`${ebsUrl}/api/twitch/extension/catalog`, {
           headers: { "x-extension-jwt": auth.token },
         }));
-        const walletResponse = await parseResponse<{
-          wallet: ViewerWallet;
-          sparkPacks: SparkPackDefinition[];
-        }>(await fetch(`${ebsUrl}/api/twitch/extension/wallet`, {
-          headers: { "x-extension-jwt": auth.token },
-        }));
+        await refreshWallet(auth.token);
         setEffects(catalog.effects);
-        setWallet(walletResponse.wallet);
-        setSparkPacks(walletResponse.sparkPacks);
         if (window.Twitch?.ext?.features?.isBitsEnabled && window.Twitch.ext.bits) {
           try {
             setBitsProducts(await window.Twitch.ext.bits.getProducts());
@@ -113,7 +172,7 @@ export function ViewerApp() {
       return () => window.clearTimeout(timer);
     }
     listeners.push((auth) => void connect(auth));
-  }, []);
+  }, [refreshWallet]);
 
   useEffect(() => {
     const bits = window.Twitch?.ext?.bits;
@@ -138,7 +197,7 @@ export function ViewerApp() {
       pendingPurchase.current = null;
       void creditSparkPack(sku, transactionId, transactionReceipt);
     });
-  }, [authorization, sparkPacks]);
+  }, [creditSparkPack]);
 
   const categories = useMemo(
     () => ["All", ...new Set(effects.map((effect) => effect.category))],
@@ -230,30 +289,6 @@ export function ViewerApp() {
     setSubmitting(true);
     setNotice(`Confirm ${product.cost.amount} Bits for ${pack.sparks.toLocaleString()} Sparks.`);
     bits.useBits(product.sku);
-  };
-
-  const creditSparkPack = async (sku: string, transactionId: string, transactionReceipt: string) => {
-    if (authorization.status !== "ready") return;
-    setSubmitting(true);
-    try {
-      const result = await parseResponse<{ wallet: ViewerWallet }>(
-        await fetch(`${ebsUrl}/api/twitch/extension/wallet`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-extension-jwt": authorization.token,
-          },
-          body: JSON.stringify({ sku, transactionId, transactionReceipt }),
-        }),
-      );
-      setWallet(result.wallet);
-      const pack = sparkPacks.find((item) => item.sku === sku);
-      setNotice(pack ? `${pack.sparks.toLocaleString()} Sparks added.` : "Sparks added.");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Spark purchase failed.");
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   return (

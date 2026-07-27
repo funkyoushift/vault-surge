@@ -182,8 +182,13 @@ export class VaultSurgeCommandQueue extends DurableObjectBase {
   ): Promise<ViewerWallet> {
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Credit amount is invalid.");
     const transactionKey = `wallet-transaction:${source}:${transactionId}`;
-    const existing = await this.ctx.storage.get(transactionKey);
-    if (existing) return this.wallet(viewerId);
+    const existing = await this.ctx.storage.get<{ viewerId?: string }>(transactionKey);
+    if (existing) {
+      if (existing.viewerId && existing.viewerId !== viewerId) {
+        throw new Error("This Bits receipt was already credited to a different viewer.");
+      }
+      return this.wallet(viewerId);
+    }
     const wallets = await this.readWallets();
     const wallet = wallets[viewerId] ?? this.emptyWallet();
     wallet.balance += Math.floor(amount);

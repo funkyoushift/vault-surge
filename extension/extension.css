@@ -19,7 +19,7 @@ button:focus-visible, select:focus-visible, textarea:focus-visible {
   width: 100%;
   height: 100vh;
   min-height: 0;
-  padding: 8px;
+  padding: 7px;
   background:
     linear-gradient(135deg, rgba(58, 232, 255, .08), transparent 36%),
     linear-gradient(180deg, rgba(5, 12, 24, .98), rgba(9, 15, 28, .97));
@@ -31,8 +31,8 @@ button:focus-visible, select:focus-visible, textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 6px;
-  padding: 7px 9px;
+  margin-bottom: 5px;
+  padding: 6px 8px;
   border: 1px solid rgba(56, 232, 255, .13);
   border-radius: 7px;
   background: rgba(3, 9, 19, .72);
@@ -56,7 +56,7 @@ h1, h2, p { margin: 0; }
 h1 {
   overflow: hidden;
   color: #f8fbff;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1.05;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -130,27 +130,27 @@ header p {
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
-  margin-bottom: 6px;
+  gap: 4px;
+  margin-bottom: 5px;
 }
 
 .spark-shop button {
-  min-height: 34px;
-  padding: 5px;
+  min-height: 30px;
+  padding: 4px;
   border: 1px solid rgba(56, 232, 255, .48);
   border-radius: 7px;
   color: #06101d;
   background: linear-gradient(180deg, #8af5ff, #38e8ff);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 950;
 }
 
 .spark-shop button small {
   display: block;
-  margin-top: 2px;
+  margin-top: 1px;
   color: rgba(6, 16, 29, .72);
-  font-size: 9px;
+  font-size: 8px;
   text-transform: uppercase;
 }
 
@@ -167,9 +167,9 @@ header p {
 nav {
   flex: 0 0 auto;
   display: flex;
-  gap: 6px;
-  margin-bottom: 6px;
-  padding-bottom: 3px;
+  gap: 5px;
+  margin-bottom: 5px;
+  padding-bottom: 2px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -177,14 +177,15 @@ nav {
 nav::-webkit-scrollbar { display: none; }
 
 nav button {
-  min-height: 30px;
-  padding: 0 10px;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 9px;
   border: 1px solid #2c3d55;
   border-radius: 999px;
   color: #b9c7ff;
   background: rgba(77, 116, 255, .18);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 850;
   white-space: nowrap;
 }
@@ -199,10 +200,10 @@ nav button.active {
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 7px;
+  gap: 6px;
   min-height: 0;
   max-height: none;
-  padding-right: 10px;
+  padding-right: 9px;
   overflow-y: auto;
   scrollbar-color: #38e8ff rgba(3, 9, 19, .75);
   scrollbar-width: auto;
@@ -225,8 +226,8 @@ nav button.active {
 
 .effect {
   display: block;
-  min-height: 64px;
-  padding: 6px;
+  min-height: 58px;
+  padding: 5px;
   border: 1px solid rgba(75, 111, 158, .62);
   border-left: 4px solid #4d74ff;
   border-radius: 7px;
@@ -245,7 +246,7 @@ nav button.active {
   gap: 8px;
   overflow: hidden;
   color: #94a8c6;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 850;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -281,14 +282,14 @@ nav button.active {
   place-items: center;
   gap: 4px;
   width: 100%;
-  min-height: 48px;
-  padding: 7px 10px;
+  min-height: 42px;
+  padding: 6px 8px;
   border: 1px solid rgba(89, 241, 255, .82);
   border-radius: 7px;
   color: #06101d;
   background: linear-gradient(180deg, #50ecff, #21c8e8);
   cursor: pointer;
-  font-size: 21px;
+  font-size: 18px;
   font-weight: 900;
   box-shadow: 0 0 18px rgba(56, 232, 255, .12);
 }
@@ -296,7 +297,7 @@ nav button.active {
 .effect button small {
   display: block;
   color: rgba(6, 16, 29, .72);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 950;
   letter-spacing: .08em;
   line-height: 1;
@@ -432,11 +433,11 @@ button:disabled {
 
 @media (min-width: 420px), (min-height: 620px) {
   .viewer {
-    padding: 10px;
+    padding: 8px;
   }
 
   .viewer > header {
-    margin-bottom: 7px;
+    margin-bottom: 6px;
   }
 
   .eyebrow {
@@ -444,7 +445,7 @@ button:disabled {
   }
 
   h1 {
-    font-size: 27px;
+    font-size: 24px;
     white-space: normal;
   }
 
@@ -459,36 +460,36 @@ button:disabled {
 
   .spark-shop {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
-    margin-bottom: 7px;
+    gap: 5px;
+    margin-bottom: 6px;
   }
 
   .spark-shop button {
-    min-height: 36px;
-    font-size: 12px;
+    min-height: 32px;
+    font-size: 11px;
   }
 
   nav {
-    gap: 8px;
-    margin-bottom: 7px;
+    gap: 6px;
+    margin-bottom: 6px;
   }
 
   nav button {
-    min-height: 32px;
-    padding: 0 11px;
-    font-size: 12px;
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 11px;
   }
 
   .effect-grid {
     grid-template-columns: 1fr;
-    gap: 7px;
+    gap: 6px;
     max-height: none;
     overflow-y: auto;
   }
 
   .effect {
-    min-height: 66px;
-    padding: 6px;
+    min-height: 60px;
+    padding: 5px;
     border-radius: 8px;
   }
 
@@ -505,12 +506,12 @@ button:disabled {
   }
 
   .effect button {
-    min-height: 50px;
-    font-size: 22px;
+    min-height: 44px;
+    font-size: 19px;
   }
 
   .effect button small {
-    font-size: 10px;
+    font-size: 9px;
   }
 }
 
