@@ -9,6 +9,12 @@ export interface CommandEnvelope {
   viewerDisplayName: string;
   quantity: number;
   unitCreditCost: number;
+  monetization: {
+    source: "development" | "bits" | "channel_points" | "eventsub";
+    sku?: string;
+    transactionId?: string;
+    amount?: number;
+  };
   createdAt: string;
   expiresAt: string;
   nonce: string;

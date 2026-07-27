@@ -12,6 +12,8 @@ export interface PublicEffectDefinition {
   category: EffectCategory;
   riskLevel: Exclude<RiskLevel, "restricted">;
   creditCost: number;
+  bitsSku: string;
+  bitsCost: number;
   durationSeconds?: number;
   cooldowns: { globalSeconds: number; perViewerSeconds: number };
   requiresApproval: boolean;
@@ -29,6 +31,8 @@ export function toPublicEffectDefinition(
     category: effect.category,
     riskLevel: effect.riskLevel,
     creditCost: effect.defaultCreditCost,
+    bitsSku: `vaultsurge.${effect.key}`,
+    bitsCost: effect.defaultCreditCost,
     durationSeconds: effect.durationSeconds,
     cooldowns: effect.cooldowns,
     requiresApproval: effect.requiresApproval,

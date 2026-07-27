@@ -2,7 +2,11 @@ import {
   listCommands,
   updateCommandStatus,
 } from "../../../../lib/backend/command-queue";
-import { getCompanionState } from "../../../../lib/backend/companion-state";
+import {
+  getCompanionState,
+  setPaused,
+  setSessionActive,
+} from "../../../../lib/backend/companion-state";
 import type { EffectLifecycleStatus } from "../../../../lib/contracts/commands";
 
 function authorized(request: Request): boolean {
@@ -22,7 +26,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!authorized(request)) return Response.json({ error: "Companion authorization failed." }, { status: 401 });
   try {
-    const body = await request.json() as { id?: unknown; status?: unknown; detail?: unknown };
+    const body = await request.json() as { action?: unknown; id?: unknown; status?: unknown; detail?: unknown };
+    if (body.action === "set-session") {
+      return Response.json({ state: setSessionActive(body.id === "true") });
+    }
+    if (body.action === "set-pause") {
+      return Response.json({ state: setPaused(body.id === "true") });
+    }
     if (typeof body.id !== "string" || typeof body.status !== "string") {
       return Response.json({ error: "Command id and status are required." }, { status: 400 });
     }

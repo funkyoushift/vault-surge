@@ -21,6 +21,7 @@ export function canonicalCommand(command) {
     viewerId: command.viewerId,
     viewerParameters: command.viewerParameters,
     adapterParameters: command.adapterParameters,
+    monetization: command.monetization,
     createdAt: command.createdAt,
     expiresAt: command.expiresAt,
     nonce: command.nonce,
@@ -132,6 +133,13 @@ async function updateStatus(ebsUrl, headers, id, status, detail) {
   await requestJson(`${ebsUrl}/api/streamer/commands`, { method: "POST", headers }, { id, status, detail });
 }
 
+async function updateSession(ebsUrl, headers, active) {
+  await requestJson(`${ebsUrl}/api/streamer/commands`, { method: "POST", headers }, {
+    action: "set-session",
+    id: active ? "true" : "false",
+  });
+}
+
 async function dispatchCommand(command, configuration) {
   const { ebsUrl, companionHeaders, sdkHeaders, signingSecret } = configuration;
   if (!verifyCommandSignature(command, signingSecret)) {
@@ -197,6 +205,22 @@ export async function main() {
   };
   const inFlight = new Set();
   console.log("[Vault Surge Worker] Connected queue runner started.");
+  await updateSession(ebsUrl, configuration.companionHeaders, true);
+  let shuttingDown = false;
+  const stop = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    try {
+      await updateSession(ebsUrl, configuration.companionHeaders, false);
+    } catch (error) {
+      console.error(`[Vault Surge Worker] Session shutdown update failed: ${error.message}`);
+    } finally {
+      rmSync(lockPath, { force: true });
+      process.exit(0);
+    }
+  };
+  process.once("SIGINT", () => void stop());
+  process.once("SIGTERM", () => void stop());
   try {
     while (true) {
       try {

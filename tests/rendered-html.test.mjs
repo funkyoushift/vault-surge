@@ -50,12 +50,24 @@ test("builds a static Twitch viewer with helper registered before application co
   const helperPosition = html.indexOf("twitch-ext.min.js");
   const bootstrapPosition = html.indexOf("twitch-bootstrap.js");
   const applicationPosition = html.indexOf('src="./viewer.js"');
+  const bootCssPosition = html.indexOf('href="./boot.css"');
+  const extensionCssPosition = html.indexOf('href="./extension.css"');
   assert.ok(helperPosition >= 0);
   assert.ok(bootstrapPosition > helperPosition);
   assert.ok(applicationPosition > bootstrapPosition);
+  assert.ok(bootCssPosition > bootstrapPosition);
+  assert.ok(extensionCssPosition > bootCssPosition);
   assert.doesNotMatch(html, /type="module"/);
   assert.match(html, /data-surface="component"/);
   assert.match(html, /Loading viewer controls/);
+});
+
+test("builds a mobile Twitch viewer entry with the same controls bundle", async () => {
+  const html = await readFile(new URL("../extension-dist/mobile.html", import.meta.url), "utf8");
+  assert.match(html, /extension-files\.twitch\.tv\/helper\/v1\/twitch-ext\.min\.js/);
+  assert.match(html, /src="\.\/viewer\.js"/);
+  assert.match(html, /href="\.\/extension\.css"/);
+  assert.match(html, /data-surface="mobile"/);
 });
 
 test("Config view loads Twitch's required Extension Helper", async () => {
@@ -66,7 +78,8 @@ test("Config view loads Twitch's required Extension Helper", async () => {
 
 test("viewer bundle contains safe controls without adapter internals", async () => {
   const bundle = await readFile(new URL("../extension-dist/viewer.js", import.meta.url), "utf8");
-  assert.match(bundle, /Choose the chaos/);
+  assert.match(bundle, /Commands/);
+  assert.match(bundle, /live effects/);
   assert.match(bundle, /api\/twitch\/extension\/catalog/);
   assert.match(bundle, /api\/twitch\/extension\/commands/);
   assert.doesNotMatch(bundle, /adapterParameters|hookNote|Char_[A-Za-z0-9_]+|ASD_barrellogo|COMMAND_SIGNING_SECRET/);

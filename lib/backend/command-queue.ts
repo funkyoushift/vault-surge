@@ -49,6 +49,7 @@ async function sign(command: Omit<QueuedCommand, "signature">): Promise<string> 
     viewerId: command.viewerId,
     viewerParameters: command.viewerParameters,
     adapterParameters: command.adapterParameters,
+    monetization: command.monetization,
     createdAt: command.createdAt,
     expiresAt: command.expiresAt,
     nonce: command.nonce,
@@ -83,7 +84,12 @@ export async function enqueueViewerCommand(
   claims: TwitchExtensionClaims,
   effect: EffectDefinition,
   rawViewerParameters: EffectViewerParameters,
-  options: { skipCooldown?: boolean; allowDisabled?: boolean; allowRestricted?: boolean } = {},
+  options: {
+    skipCooldown?: boolean;
+    allowDisabled?: boolean;
+    allowRestricted?: boolean;
+    monetization?: QueuedCommand["monetization"];
+  } = {},
 ): Promise<QueuedCommand> {
   assertSession(claims);
   if (
@@ -104,6 +110,7 @@ export async function enqueueViewerCommand(
     viewerDisplayName: claims.opaque_user_id,
     quantity: 1,
     unitCreditCost: effect.defaultCreditCost,
+    monetization: options.monetization ?? { source: "development" },
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + 120_000).toISOString(),
     nonce: crypto.randomUUID(),

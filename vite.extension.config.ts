@@ -13,8 +13,12 @@ const hasCertificate =
 export default defineConfig({
   root: extensionRoot,
   base: "./",
+  envDir: projectRoot,
   publicDir: resolve(extensionRoot, "public"),
   plugins: [react()],
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("production"),
+  },
   server: {
     port: 8081,
     strictPort: true,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   PublicEffectDefinition,
 } from "../lib/contracts/public-effects";
@@ -17,6 +17,11 @@ type AuthorizationState =
   | { status: "ready"; token: string; identity: ExtensionIdentity }
   | { status: "error"; message: string };
 
+type PendingPurchase = {
+  effect: PublicEffectDefinition;
+  parameters: Record<string, string>;
+};
+
 async function parseResponse<T>(response: Response): Promise<T> {
   const payload = await response.json() as T & { error?: string };
   if (!response.ok) {
@@ -33,8 +38,11 @@ export function ViewerApp() {
   const [category, setCategory] = useState("All");
   const [selected, setSelected] = useState<PublicEffectDefinition | null>(null);
   const [parameters, setParameters] = useState<Record<string, string>>({});
+  const [bitsProducts, setBitsProducts] = useState<TwitchBitsProduct[]>([]);
+  const [bitsReady, setBitsReady] = useState(false);
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const pendingPurchase = useRef<PendingPurchase | null>(null);
 
   useEffect(() => {
     const connect = async (auth: VaultSurgeAuthorization) => {
@@ -51,6 +59,14 @@ export function ViewerApp() {
           headers: { "x-extension-jwt": auth.token },
         }));
         setEffects(catalog.effects);
+        if (window.Twitch?.ext?.features?.isBitsEnabled && window.Twitch.ext.bits) {
+          try {
+            setBitsProducts(await window.Twitch.ext.bits.getProducts());
+            setBitsReady(true);
+          } catch {
+            setBitsReady(false);
+          }
+        }
         setAuthorization({
           status: "ready",
           token: auth.token,
@@ -79,6 +95,26 @@ export function ViewerApp() {
     listeners.push((auth) => void connect(auth));
   }, []);
 
+  useEffect(() => {
+    const bits = window.Twitch?.ext?.bits;
+    if (!bits) return;
+    bits.onTransactionCancelled(() => {
+      pendingPurchase.current = null;
+      setSubmitting(false);
+      setNotice("Bits purchase was cancelled.");
+    });
+    bits.onTransactionComplete((transaction) => {
+      const pending = pendingPurchase.current;
+      const sku = transaction.product?.sku || transaction.productSku || "";
+      if (!pending || sku !== pending.effect.bitsSku) return;
+      pendingPurchase.current = null;
+      void submitCommand(pending.effect, pending.parameters, {
+        sku,
+        transactionId: transaction.transactionId,
+      });
+    });
+  }, []);
+
   const categories = useMemo(
     () => ["All", ...new Set(effects.map((effect) => effect.category))],
     [effects],
@@ -86,18 +122,36 @@ export function ViewerApp() {
   const visibleEffects = category === "All"
     ? effects
     : effects.filter((effect) => effect.category === category);
+  const selectedCategoryCount = visibleEffects.length;
+  const productBySku = useMemo(
+    () => new Map(bitsProducts.map((product) => [product.sku, product])),
+    [bitsProducts],
+  );
 
-  const openEffect = (effect: PublicEffectDefinition) => {
-    setSelected(effect);
-    setNotice("");
-    setParameters(Object.fromEntries((effect.inputs ?? []).map((input) => [
+  const defaultParametersFor = (effect: PublicEffectDefinition) => Object.fromEntries(
+    (effect.inputs ?? []).map((input) => [
       input.key,
       input.kind === "select" ? input.defaultValue : "",
-    ])));
+    ]),
+  );
+
+  const openEffect = (effect: PublicEffectDefinition) => {
+    setNotice("");
+    const nextParameters = defaultParametersFor(effect);
+    if (!effect.inputs?.length) {
+      void requestEffect(effect, nextParameters);
+      return;
+    }
+    setSelected(effect);
+    setParameters(nextParameters);
   };
 
-  const submitEffect = async () => {
-    if (!selected || authorization.status !== "ready") return;
+  const submitCommand = async (
+    effect: PublicEffectDefinition,
+    viewerParameters: Record<string, string>,
+    monetization?: { sku?: string; transactionId?: string },
+  ) => {
+    if (authorization.status !== "ready") return;
     setSubmitting(true);
     setNotice("");
     try {
@@ -110,8 +164,9 @@ export function ViewerApp() {
           "x-extension-jwt": authorization.token,
         },
         body: JSON.stringify({
-          effectKey: selected.key,
-          viewerParameters: parameters,
+          effectKey: effect.key,
+          viewerParameters,
+          monetization,
         }),
       }));
       setNotice(result.command.statusDetail);
@@ -123,12 +178,30 @@ export function ViewerApp() {
     }
   };
 
+  const requestEffect = async (
+    effect: PublicEffectDefinition,
+    viewerParameters: Record<string, string>,
+  ) => {
+    if (authorization.status !== "ready") return;
+    const bits = window.Twitch?.ext?.bits;
+    const product = bitsProducts.find((item) => item.sku === effect.bitsSku);
+    if (bitsReady && bits && product) {
+      pendingPurchase.current = { effect, parameters: viewerParameters };
+      setSubmitting(true);
+      setNotice(`Confirm ${product.cost.amount} Bits in the Twitch popup.`);
+      bits.useBits(product.sku);
+      return;
+    }
+    await submitCommand(effect, viewerParameters);
+  };
+
   return (
     <main className="viewer component">
       <header>
         <div>
           <span className="eyebrow">VAULT//SURGE</span>
-          <h1>Choose the chaos.</h1>
+          <h1>Commands</h1>
+          <p>{selectedCategoryCount} live effects</p>
         </div>
         <span className={`connection ${authorization.status}`}>
           {authorization.status === "ready"
@@ -164,16 +237,21 @@ export function ViewerApp() {
               {effect.requiresApproval && <span>Approval</span>}
             </div>
             <h2>{effect.displayName}</h2>
-            <p>{effect.description}</p>
             <div className="metadata">
               <span>{effect.creditCost} Sparks</span>
               <span>{effect.cooldowns.perViewerSeconds}s cooldown</span>
             </div>
             <button
+              aria-label={`Select ${effect.displayName}`}
               disabled={authorization.status !== "ready"}
               onClick={() => openEffect(effect)}
             >
-              Select
+              <span>{effect.displayName}</span>
+              <small>
+                {productBySku.get(effect.bitsSku)
+                  ? `${productBySku.get(effect.bitsSku)?.cost.amount} Bits`
+                  : `${effect.creditCost} Sparks`}
+              </small>
             </button>
           </article>
         ))}
@@ -219,8 +297,12 @@ export function ViewerApp() {
               <button className="secondary" onClick={() => setSelected(null)}>
                 Cancel
               </button>
-              <button disabled={submitting} onClick={() => void submitEffect()}>
-                {submitting ? "Sending…" : `Confirm ${selected.creditCost} Sparks`}
+              <button disabled={submitting} onClick={() => void requestEffect(selected, parameters)}>
+                {submitting
+                  ? "Sending…"
+                  : productBySku.get(selected.bitsSku)
+                    ? `Confirm ${productBySku.get(selected.bitsSku)?.cost.amount} Bits`
+                    : `Confirm ${selected.creditCost} Sparks`}
               </button>
             </div>
           </section>

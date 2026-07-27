@@ -12,13 +12,30 @@ export async function POST(request: Request) {
     const body = await request.json() as {
       effectKey?: unknown;
       viewerParameters?: unknown;
+      monetization?: unknown;
     };
     const effect = typeof body.effectKey === "string" ? effectByKey.get(body.effectKey) : undefined;
     if (!effect) return Response.json({ error: "Unknown effect." }, { status: 400, headers });
     const viewerParameters = body.viewerParameters && typeof body.viewerParameters === "object"
       ? Object.fromEntries(Object.entries(body.viewerParameters).map(([key, value]) => [key, String(value)]))
       : {};
-    const command = await enqueueViewerCommand(claims, effect, viewerParameters);
+    const monetization = body.monetization && typeof body.monetization === "object"
+      ? body.monetization as Record<string, unknown>
+      : {};
+    const bitsSku = typeof monetization.sku === "string" ? monetization.sku : "";
+    const transactionId = typeof monetization.transactionId === "string" ? monetization.transactionId : "";
+    const expectedSku = `vaultsurge.${effect.key}`;
+    if (bitsSku && bitsSku !== expectedSku) return Response.json({ error: "Bits SKU does not match effect." }, { status: 400, headers });
+    const command = await enqueueViewerCommand(claims, effect, viewerParameters, {
+      monetization: bitsSku
+        ? {
+            source: "bits",
+            sku: bitsSku,
+            transactionId,
+            amount: effect.defaultCreditCost,
+          }
+        : { source: "development" },
+    });
     return Response.json({
       accepted: true,
       command: {
