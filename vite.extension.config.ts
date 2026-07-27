@@ -29,11 +29,13 @@ export default defineConfig({
   build: {
     outDir: resolve(projectRoot, "extension-dist"),
     emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        viewer: resolve(extensionRoot, "viewer.html"),
-        config: resolve(extensionRoot, "config.html"),
-      },
+    cssCodeSplit: false,
+    lib: {
+      entry: resolve(extensionRoot, "viewer-main.tsx"),
+      name: "VaultSurgeViewer",
+      formats: ["iife"],
+      fileName: () => "viewer.js",
+      cssFileName: "extension",
     },
   },
 });

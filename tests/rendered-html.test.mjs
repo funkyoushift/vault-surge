@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function requestApp(path = "/", init = {}) {
@@ -49,10 +49,11 @@ test("builds a static Twitch viewer with helper registered before application co
   const html = await readFile(new URL("../extension-dist/viewer.html", import.meta.url), "utf8");
   const helperPosition = html.indexOf("twitch-ext.min.js");
   const bootstrapPosition = html.indexOf("twitch-bootstrap.js");
-  const modulePosition = html.indexOf('type="module"');
+  const applicationPosition = html.indexOf('src="./viewer.js"');
   assert.ok(helperPosition >= 0);
   assert.ok(bootstrapPosition > helperPosition);
-  assert.ok(modulePosition > bootstrapPosition);
+  assert.ok(applicationPosition > bootstrapPosition);
+  assert.doesNotMatch(html, /type="module"/);
   assert.match(html, /data-surface="component"/);
   assert.match(html, /Loading viewer controls/);
 });
@@ -64,12 +65,7 @@ test("Config view loads Twitch's required Extension Helper", async () => {
 });
 
 test("viewer bundle contains safe controls without adapter internals", async () => {
-  const assetNames = await readdir(new URL("../extension-dist/assets/", import.meta.url));
-  const scripts = await Promise.all(
-    assetNames.filter((name) => name.endsWith(".js"))
-      .map((name) => readFile(new URL(`../extension-dist/assets/${name}`, import.meta.url), "utf8")),
-  );
-  const bundle = scripts.join("\n");
+  const bundle = await readFile(new URL("../extension-dist/viewer.js", import.meta.url), "utf8");
   assert.match(bundle, /Choose the chaos/);
   assert.match(bundle, /api\/twitch\/extension\/catalog/);
   assert.match(bundle, /api\/twitch\/extension\/commands/);
