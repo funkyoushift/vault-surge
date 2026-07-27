@@ -10,7 +10,7 @@ export interface CommandEnvelope {
   quantity: number;
   unitCreditCost: number;
   monetization: {
-    source: "development" | "bits" | "channel_points" | "eventsub";
+    source: "development" | "sparks" | "bits" | "channel_points" | "eventsub";
     sku?: string;
     transactionId?: string;
     amount?: number;

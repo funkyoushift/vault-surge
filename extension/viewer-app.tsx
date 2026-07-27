@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   PublicEffectDefinition,
 } from "../lib/contracts/public-effects";
+import type { SparkPackDefinition } from "../lib/contracts/spark-packs";
 
 const ebsUrl = (
   import.meta.env.VITE_EXTENSION_EBS_URL || "https://localhost:3000"
@@ -17,9 +18,14 @@ type AuthorizationState =
   | { status: "ready"; token: string; identity: ExtensionIdentity }
   | { status: "error"; message: string };
 
+type ViewerWallet = {
+  balance: number;
+  lifetimeEarned: number;
+  lifetimeSpent: number;
+};
+
 type PendingPurchase = {
-  effect: PublicEffectDefinition;
-  parameters: Record<string, string>;
+  pack: SparkPackDefinition;
 };
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -40,6 +46,12 @@ export function ViewerApp() {
   const [parameters, setParameters] = useState<Record<string, string>>({});
   const [bitsProducts, setBitsProducts] = useState<TwitchBitsProduct[]>([]);
   const [bitsReady, setBitsReady] = useState(false);
+  const [sparkPacks, setSparkPacks] = useState<SparkPackDefinition[]>([]);
+  const [wallet, setWallet] = useState<ViewerWallet>({
+    balance: 0,
+    lifetimeEarned: 0,
+    lifetimeSpent: 0,
+  });
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const pendingPurchase = useRef<PendingPurchase | null>(null);
@@ -58,7 +70,15 @@ export function ViewerApp() {
         }>(await fetch(`${ebsUrl}/api/twitch/extension/catalog`, {
           headers: { "x-extension-jwt": auth.token },
         }));
+        const walletResponse = await parseResponse<{
+          wallet: ViewerWallet;
+          sparkPacks: SparkPackDefinition[];
+        }>(await fetch(`${ebsUrl}/api/twitch/extension/wallet`, {
+          headers: { "x-extension-jwt": auth.token },
+        }));
         setEffects(catalog.effects);
+        setWallet(walletResponse.wallet);
+        setSparkPacks(walletResponse.sparkPacks);
         if (window.Twitch?.ext?.features?.isBitsEnabled && window.Twitch.ext.bits) {
           try {
             setBitsProducts(await window.Twitch.ext.bits.getProducts());
@@ -106,14 +126,19 @@ export function ViewerApp() {
     bits.onTransactionComplete((transaction) => {
       const pending = pendingPurchase.current;
       const sku = transaction.product?.sku || transaction.productSku || "";
-      if (!pending || sku !== pending.effect.bitsSku) return;
+      const transactionId = transaction.transactionId || transaction.transactionID || "";
+      const transactionReceipt = transaction.transactionReceipt || "";
+      if (!pending || sku !== pending.pack.sku) return;
+      if (!transactionId || !transactionReceipt) {
+        pendingPurchase.current = null;
+        setSubmitting(false);
+        setNotice("Twitch did not return a verifiable Bits receipt.");
+        return;
+      }
       pendingPurchase.current = null;
-      void submitCommand(pending.effect, pending.parameters, {
-        sku,
-        transactionId: transaction.transactionId,
-      });
+      void creditSparkPack(sku, transactionId, transactionReceipt);
     });
-  }, []);
+  }, [authorization, sparkPacks]);
 
   const categories = useMemo(
     () => ["All", ...new Set(effects.map((effect) => effect.category))],
@@ -127,6 +152,7 @@ export function ViewerApp() {
     () => new Map(bitsProducts.map((product) => [product.sku, product])),
     [bitsProducts],
   );
+  const purchasablePacks = sparkPacks.filter((pack) => productBySku.has(pack.sku));
 
   const defaultParametersFor = (effect: PublicEffectDefinition) => Object.fromEntries(
     (effect.inputs ?? []).map((input) => [
@@ -149,7 +175,6 @@ export function ViewerApp() {
   const submitCommand = async (
     effect: PublicEffectDefinition,
     viewerParameters: Record<string, string>,
-    monetization?: { sku?: string; transactionId?: string },
   ) => {
     if (authorization.status !== "ready") return;
     setSubmitting(true);
@@ -166,8 +191,12 @@ export function ViewerApp() {
         body: JSON.stringify({
           effectKey: effect.key,
           viewerParameters,
-          monetization,
         }),
+      }));
+      setWallet((current) => ({
+        ...current,
+        balance: Math.max(0, current.balance - effect.creditCost),
+        lifetimeSpent: current.lifetimeSpent + effect.creditCost,
       }));
       setNotice(result.command.statusDetail);
       setSelected(null);
@@ -183,16 +212,48 @@ export function ViewerApp() {
     viewerParameters: Record<string, string>,
   ) => {
     if (authorization.status !== "ready") return;
-    const bits = window.Twitch?.ext?.bits;
-    const product = bitsProducts.find((item) => item.sku === effect.bitsSku);
-    if (bitsReady && bits && product) {
-      pendingPurchase.current = { effect, parameters: viewerParameters };
-      setSubmitting(true);
-      setNotice(`Confirm ${product.cost.amount} Bits in the Twitch popup.`);
-      bits.useBits(product.sku);
+    if (wallet.balance < effect.creditCost) {
+      setNotice(`You need ${(effect.creditCost - wallet.balance).toLocaleString()} more Sparks.`);
       return;
     }
     await submitCommand(effect, viewerParameters);
+  };
+
+  const buySparkPack = (pack: SparkPackDefinition) => {
+    const bits = window.Twitch?.ext?.bits;
+    const product = productBySku.get(pack.sku);
+    if (!bitsReady || !bits || !product) {
+      setNotice("Bits Spark packs are not available yet. Refresh after saving the Twitch products.");
+      return;
+    }
+    pendingPurchase.current = { pack };
+    setSubmitting(true);
+    setNotice(`Confirm ${product.cost.amount} Bits for ${pack.sparks.toLocaleString()} Sparks.`);
+    bits.useBits(product.sku);
+  };
+
+  const creditSparkPack = async (sku: string, transactionId: string, transactionReceipt: string) => {
+    if (authorization.status !== "ready") return;
+    setSubmitting(true);
+    try {
+      const result = await parseResponse<{ wallet: ViewerWallet }>(
+        await fetch(`${ebsUrl}/api/twitch/extension/wallet`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-extension-jwt": authorization.token,
+          },
+          body: JSON.stringify({ sku, transactionId, transactionReceipt }),
+        }),
+      );
+      setWallet(result.wallet);
+      const pack = sparkPacks.find((item) => item.sku === sku);
+      setNotice(pack ? `${pack.sparks.toLocaleString()} Sparks added.` : "Sparks added.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Spark purchase failed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -203,19 +264,40 @@ export function ViewerApp() {
           <h1>Commands</h1>
           <p>{selectedCategoryCount} live effects</p>
         </div>
-        <span className={`connection ${authorization.status}`}>
-          {authorization.status === "ready"
-            ? "Connected"
-            : authorization.status === "error"
-              ? "Unavailable"
-              : "Connecting"}
-        </span>
+        <div className="viewer-status">
+          <strong>{wallet.balance.toLocaleString()} Sparks</strong>
+          <span className={`connection ${authorization.status}`}>
+            {authorization.status === "ready"
+              ? "Connected"
+              : authorization.status === "error"
+                ? "Unavailable"
+                : "Connecting"}
+          </span>
+        </div>
       </header>
 
       {authorization.status === "error" && (
         <div className="notice error">{authorization.message}</div>
       )}
       {notice && <div className="notice">{notice}</div>}
+
+      <section className="spark-shop" aria-label="Buy Sparks">
+        {purchasablePacks.length > 0 ? purchasablePacks.map((pack) => {
+          const product = productBySku.get(pack.sku);
+          return (
+            <button
+              disabled={authorization.status !== "ready" || submitting}
+              key={pack.sku}
+              onClick={() => buySparkPack(pack)}
+            >
+              <span>{pack.sparks.toLocaleString()} Sparks</span>
+              <small>{product?.cost.amount ?? pack.bitsCost} Bits</small>
+            </button>
+          );
+        }) : (
+          <p>Bits Spark packs loading.</p>
+        )}
+      </section>
 
       <nav aria-label="Effect categories">
         {categories.map((item) => (
@@ -243,15 +325,11 @@ export function ViewerApp() {
             </div>
             <button
               aria-label={`Select ${effect.displayName}`}
-              disabled={authorization.status !== "ready"}
+              disabled={authorization.status !== "ready" || wallet.balance < effect.creditCost}
               onClick={() => openEffect(effect)}
             >
               <span>{effect.displayName}</span>
-              <small>
-                {productBySku.get(effect.bitsSku)
-                  ? `${productBySku.get(effect.bitsSku)?.cost.amount} Bits`
-                  : `${effect.creditCost} Sparks`}
-              </small>
+              <small>{effect.creditCost} Sparks</small>
             </button>
           </article>
         ))}
@@ -298,11 +376,7 @@ export function ViewerApp() {
                 Cancel
               </button>
               <button disabled={submitting} onClick={() => void requestEffect(selected, parameters)}>
-                {submitting
-                  ? "Sending…"
-                  : productBySku.get(selected.bitsSku)
-                    ? `Confirm ${productBySku.get(selected.bitsSku)?.cost.amount} Bits`
-                    : `Confirm ${selected.creditCost} Sparks`}
+                {submitting ? "Sending..." : `Spend ${selected.creditCost} Sparks`}
               </button>
             </div>
           </section>

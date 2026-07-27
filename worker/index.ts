@@ -3,6 +3,7 @@ import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } fr
 import handler from "vinext/server/app-router-entry";
 import { terminalStatuses, type EffectLifecycleStatus } from "../lib/contracts/commands";
 import type { QueuedCommand } from "../lib/backend/command-queue";
+import type { ViewerWallet } from "../lib/backend/viewer-wallet";
 
 const DurableObjectBase = await import("cloudflare:workers")
   .then((module) => module.DurableObject)
@@ -67,6 +68,41 @@ export class VaultSurgeCommandQueue extends DurableObjectBase {
           typeof body.detail === "string" ? body.detail : undefined,
         ));
       }
+      if (url.pathname === "/wallet") {
+        const body = await request.json() as { viewerId?: unknown };
+        if (typeof body.viewerId !== "string") return new Response("Viewer id is required.", { status: 400 });
+        return Response.json(await this.wallet(body.viewerId));
+      }
+      if (url.pathname === "/wallet-credit") {
+        const body = await request.json() as {
+          viewerId?: unknown;
+          source?: unknown;
+          sku?: unknown;
+          transactionId?: unknown;
+          amount?: unknown;
+        };
+        if (typeof body.viewerId !== "string" || typeof body.transactionId !== "string" || typeof body.amount !== "number") {
+          return new Response("Viewer id, transaction id, and amount are required.", { status: 400 });
+        }
+        return Response.json(await this.creditWallet(
+          body.viewerId,
+          body.amount,
+          body.transactionId,
+          typeof body.source === "string" ? body.source : "unknown",
+          typeof body.sku === "string" ? body.sku : undefined,
+        ));
+      }
+      if (url.pathname === "/wallet-spend") {
+        const body = await request.json() as {
+          viewerId?: unknown;
+          amount?: unknown;
+          commandId?: unknown;
+        };
+        if (typeof body.viewerId !== "string" || typeof body.amount !== "number" || typeof body.commandId !== "string") {
+          return new Response("Viewer id, amount, and command id are required.", { status: 400 });
+        }
+        return Response.json(await this.spendWallet(body.viewerId, body.amount, body.commandId));
+      }
       return new Response("Not found.", { status: 404 });
     } catch (error) {
       return new Response(error instanceof Error ? error.message : "Command queue failed.", { status: 400 });
@@ -118,6 +154,72 @@ export class VaultSurgeCommandQueue extends DurableObjectBase {
     command.statusDetail = detail?.slice(0, 240) || `Companion reported ${status}.`;
     await this.writeCommands(commands);
     return command;
+  }
+
+  private async readWallets(): Promise<Record<string, ViewerWallet>> {
+    return (await this.ctx.storage.get<Record<string, ViewerWallet>>("wallets")) ?? {};
+  }
+
+  private async writeWallets(wallets: Record<string, ViewerWallet>): Promise<void> {
+    await this.ctx.storage.put("wallets", wallets);
+  }
+
+  private emptyWallet(): ViewerWallet {
+    return { balance: 0, lifetimeEarned: 0, lifetimeSpent: 0 };
+  }
+
+  async wallet(viewerId: string): Promise<ViewerWallet> {
+    const wallets = await this.readWallets();
+    return wallets[viewerId] ?? this.emptyWallet();
+  }
+
+  async creditWallet(
+    viewerId: string,
+    amount: number,
+    transactionId: string,
+    source: string,
+    sku?: string,
+  ): Promise<ViewerWallet> {
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error("Credit amount is invalid.");
+    const transactionKey = `wallet-transaction:${source}:${transactionId}`;
+    const existing = await this.ctx.storage.get(transactionKey);
+    if (existing) return this.wallet(viewerId);
+    const wallets = await this.readWallets();
+    const wallet = wallets[viewerId] ?? this.emptyWallet();
+    wallet.balance += Math.floor(amount);
+    wallet.lifetimeEarned += Math.floor(amount);
+    wallets[viewerId] = wallet;
+    await this.ctx.storage.put(transactionKey, {
+      viewerId,
+      source,
+      sku,
+      amount: Math.floor(amount),
+      createdAt: new Date().toISOString(),
+    });
+    await this.writeWallets(wallets);
+    return wallet;
+  }
+
+  async spendWallet(viewerId: string, amount: number, commandId: string): Promise<ViewerWallet> {
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error("Spend amount is invalid.");
+    const transactionKey = `wallet-transaction:command:${commandId}`;
+    const existing = await this.ctx.storage.get(transactionKey);
+    if (existing) return this.wallet(viewerId);
+    const wallets = await this.readWallets();
+    const wallet = wallets[viewerId] ?? this.emptyWallet();
+    const normalizedAmount = Math.floor(amount);
+    if (wallet.balance < normalizedAmount) throw new Error("Not enough Sparks.");
+    wallet.balance -= normalizedAmount;
+    wallet.lifetimeSpent += normalizedAmount;
+    wallets[viewerId] = wallet;
+    await this.ctx.storage.put(transactionKey, {
+      viewerId,
+      source: "command",
+      amount: normalizedAmount,
+      createdAt: new Date().toISOString(),
+    });
+    await this.writeWallets(wallets);
+    return wallet;
   }
 }
 

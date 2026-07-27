@@ -14,6 +14,8 @@ interface TwitchBitsProduct {
 
 interface TwitchBitsTransaction {
   transactionId?: string;
+  transactionID?: string;
+  transactionReceipt?: string;
   product?: TwitchBitsProduct;
   productSku?: string;
 }
