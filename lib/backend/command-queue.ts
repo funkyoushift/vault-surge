@@ -11,6 +11,7 @@ import {
 } from "../contracts/effects";
 import type { TwitchExtensionClaims } from "../twitch/extension-jwt";
 import { getCompanionState } from "./companion-state";
+import { twitchViewerId } from "./viewer-wallet";
 
 export interface QueuedCommand extends CommandEnvelope {
   channelId: string;
@@ -111,7 +112,7 @@ function assertSession(claims: TwitchExtensionClaims): void {
 
 function assertCooldown(effect: EffectDefinition, claims: TwitchExtensionClaims, now: number): void {
   const globalKey = `${claims.channel_id}:${effect.key}`;
-  const viewerKey = `${globalKey}:${claims.opaque_user_id}`;
+  const viewerKey = `${globalKey}:${claims.user_id ? twitchViewerId(claims.user_id) : claims.opaque_user_id}`;
   const globalWait = effect.cooldowns.globalSeconds * 1000 - (now - (lastGlobalUse.get(globalKey) ?? 0));
   const viewerWait = effect.cooldowns.perViewerSeconds * 1000 - (now - (lastViewerUse.get(viewerKey) ?? 0));
   if (globalWait > 0 || viewerWait > 0) {
@@ -147,8 +148,8 @@ export async function enqueueViewerCommand(
     id: crypto.randomUUID(),
     channelId: claims.channel_id,
     effectKey: effect.key,
-    viewerId: claims.opaque_user_id,
-    viewerDisplayName: claims.opaque_user_id,
+    viewerId: claims.user_id ? twitchViewerId(claims.user_id) : claims.opaque_user_id,
+    viewerDisplayName: claims.user_id ? `twitch:${claims.user_id}` : claims.opaque_user_id,
     quantity: 1,
     unitCreditCost: effect.defaultCreditCost,
     monetization: options.monetization ?? { source: "development" },

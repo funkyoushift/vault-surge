@@ -61,7 +61,11 @@ async function walletRequest<T>(
 }
 
 function viewerId(claims: TwitchExtensionClaims): string {
-  return claims.opaque_user_id;
+  return claims.user_id ? twitchViewerId(claims.user_id) : claims.opaque_user_id;
+}
+
+export function twitchViewerId(userId: string): string {
+  return `twitch:${userId}`;
 }
 
 export async function getViewerWallet(claims: TwitchExtensionClaims): Promise<ViewerWallet> {
@@ -109,6 +113,21 @@ export async function refundViewerSparks(
     viewerId: viewerId(claims),
     source: "refund",
     transactionId: `refund:${commandId}`,
+    amount,
+  });
+}
+
+export async function creditChannelPointSparks(
+  channelId: string,
+  userId: string,
+  redemptionId: string,
+  amount: number,
+): Promise<ViewerWallet> {
+  if (!redemptionId.trim()) throw new Error("Channel Point redemption id is missing.");
+  return walletRequest<ViewerWallet>("wallet-credit", channelId, {
+    viewerId: twitchViewerId(userId),
+    source: "channel_points",
+    transactionId: redemptionId,
     amount,
   });
 }

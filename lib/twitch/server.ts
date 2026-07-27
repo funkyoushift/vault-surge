@@ -38,6 +38,12 @@ interface TwitchValidationResponse {
   expires_in: number;
 }
 
+interface TwitchAppTokenResponse {
+  access_token: string;
+  expires_in: number;
+  token_type: string;
+}
+
 export interface TwitchServerConfig {
   clientId: string;
   clientSecret: string;
@@ -283,6 +289,41 @@ export async function twitchHelixFetch<T>(
     ...init,
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
+      "Client-Id": config.clientId,
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+  return parseTwitchResponse<T>(response);
+}
+
+export async function getTwitchAppAccessToken(): Promise<string> {
+  const config = getTwitchServerConfig();
+  if (!config) throw new Error("Twitch OAuth is not configured.");
+  const response = await fetch(TWITCH_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      grant_type: "client_credentials",
+    }),
+  });
+  const token = await parseTwitchResponse<TwitchAppTokenResponse>(response);
+  return token.access_token;
+}
+
+export async function twitchAppHelixFetch<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const config = getTwitchServerConfig();
+  if (!config) throw new Error("Twitch OAuth is not configured.");
+  const accessToken = await getTwitchAppAccessToken();
+  const response = await fetch(`${TWITCH_HELIX_URL}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
       "Client-Id": config.clientId,
       "Content-Type": "application/json",
       ...init.headers,

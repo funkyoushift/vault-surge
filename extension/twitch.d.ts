@@ -30,6 +30,10 @@ interface Window {
       features?: {
         isBitsEnabled?: boolean;
       };
+      actions?: {
+        requestIdShare(): void;
+      };
+      onAuthorized(callback: (authorization: VaultSurgeAuthorization) => void): void;
       bits?: {
         getProducts(): Promise<TwitchBitsProduct[]>;
         useBits(sku: string): void;

@@ -10,6 +10,7 @@ const ebsUrl = (
 
 type ExtensionIdentity = {
   opaqueUserId: string;
+  userId: string | null;
   linked: boolean;
 };
 
@@ -81,6 +82,16 @@ export function ViewerApp() {
     setSparkPacks(walletResponse.sparkPacks);
     return walletResponse;
   }, []);
+
+  const requestIdentityShare = () => {
+    const action = window.Twitch?.ext?.actions?.requestIdShare;
+    if (!action) {
+      setNotice("Twitch identity sharing is not available yet. Refresh after saving extension capabilities.");
+      return;
+    }
+    setNotice("Twitch will ask permission to connect your Spark wallet.");
+    action();
+  };
 
   const creditSparkPack = useCallback(async (
     sku: string,
@@ -199,6 +210,14 @@ export function ViewerApp() {
     });
   }, [creditSparkPack]);
 
+  useEffect(() => {
+    if (authorization.status !== "ready" || !authorization.identity.linked) return;
+    const timer = window.setInterval(() => {
+      void refreshWallet(authorization.token);
+    }, 7_500);
+    return () => window.clearInterval(timer);
+  }, [authorization, refreshWallet]);
+
   const categories = useMemo(
     () => ["All", ...new Set(effects.map((effect) => effect.category))],
     [effects],
@@ -222,6 +241,10 @@ export function ViewerApp() {
 
   const openEffect = (effect: PublicEffectDefinition) => {
     setNotice("");
+    if (authorization.status === "ready" && !authorization.identity.linked) {
+      setNotice("Connect identity first so Channel Points, Bits, and Sparks use the same wallet.");
+      return;
+    }
     const nextParameters = defaultParametersFor(effect);
     if (!effect.inputs?.length) {
       void requestEffect(effect, nextParameters);
@@ -279,6 +302,10 @@ export function ViewerApp() {
   };
 
   const buySparkPack = (pack: SparkPackDefinition) => {
+    if (authorization.status === "ready" && !authorization.identity.linked) {
+      setNotice("Connect identity first so this Spark pack credits your Twitch wallet.");
+      return;
+    }
     const bits = window.Twitch?.ext?.bits;
     const product = productBySku.get(pack.sku);
     if (!bitsReady || !bits || !product) {
@@ -315,6 +342,12 @@ export function ViewerApp() {
         <div className="notice error">{authorization.message}</div>
       )}
       {notice && <div className="notice">{notice}</div>}
+
+      {authorization.status === "ready" && !authorization.identity.linked && (
+        <button className="identity-link" onClick={requestIdentityShare}>
+          Connect Twitch identity to use Sparks
+        </button>
+      )}
 
       <section className="spark-shop" aria-label="Buy Sparks">
         {purchasablePacks.length > 0 ? purchasablePacks.map((pack) => {
